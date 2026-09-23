@@ -22,11 +22,11 @@ npm run dev
 
 ## What to Work On
 
-- Additional validation checks (e.g., signature algorithm strength, SAML status code checks)
+- Cryptographic signature verification (JWKS / IdP metadata certificate)
+- Import IdP/SP metadata XML to auto-fill expected values
+- SAML AuthnRequest and LogoutRequest/Response analysis
 - Support for more token formats (e.g., PASETO)
-- Dark mode toggle
-- Export decoded results as JSON
-- Copy-to-clipboard for individual fields
+- Unit tests for decoders and checks
 - Localization / i18n
 
 ## Code Style

@@ -4,7 +4,7 @@
 
 SSO Doctor is a privacy-first diagnostic tool for engineers and IT admins debugging Single Sign-On integrations. Paste a SAML Response or JWT, and instantly see decoded fields, validation results, and actionable fix recommendations — without any data leaving your machine.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcodeycheesee%2Fsso-doctor)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcodecheesee%2Fsso-doctor)
 
 ---
 
@@ -21,48 +21,66 @@ SSO Doctor does both decoding **and** validation, tells you exactly what's wrong
 ## Features
 
 ### 🔍 Auto-Detection
-Paste any token and SSO Doctor automatically identifies whether it's a SAML Response (base64, optionally deflated) or a JWT (OIDC ID token / access token).
+Paste almost anything and SSO Doctor identifies it:
+- SAML Response or Assertion — base64, base64 + DEFLATE (HTTP-Redirect binding), or raw XML
+- JWT (OIDC ID token / access token) and JWE (encrypted JWT, flagged as unreadable)
+- Pasted as-is from dev tools: `Bearer …` headers, `SAMLResponse=…` form bodies, URL-encoded values
+- Drag and drop a file onto the input
 
-### 📋 Full Decode View
-Every field is extracted and displayed in a clean, readable layout:
-- **SAML**: Issuer, NameID, Conditions, Audience, Attributes, Recipient, Destination, Session Index, X.509 certificates, raw XML
-- **JWT**: Header (algorithm, key ID), Payload (all claims with timestamps formatted as human-readable dates), Signature
+### 🩻 Diagnosis First
+A verdict banner (Healthy / warnings / problems found) followed by every check, failures first. Each failed or warning check includes a **How to fix** note. **Copy report** puts the full result on your clipboard for a ticket.
 
 ### ✅ Validation Engine
-16 automated checks with **PASS / WARN / FAIL** status, a plain-English cause, and a recommended fix:
+Checks return **FAIL / WARN / INFO / PASS**. Skipped checks (no expected value configured) are shown as INFO, not PASS.
 
-| SAML Checks | JWT Checks |
+| SAML checks | JWT checks |
 |---|---|
-| NotBefore / NotOnOrAfter time window | `exp` / `nbf` / `iat` validity |
-| Audience vs expected Entity ID | `aud` mismatch |
-| Recipient & Destination vs ACS URL | `iss` mismatch |
-| Issuer mismatch | `alg: "none"` vulnerability |
-| X.509 certificate expiry (+ 30-day warning) | Missing `nonce` |
-| Missing NameID | Missing common claims (`sub`, `email`, `name`) |
-| Missing attributes | |
-| Missing InResponseTo (unsolicited response) | |
+| IdP status code (RequestDenied, AuthnFailed, …) with fix hints | `alg: none` / symmetric `HS*` algorithms |
+| Assertion present, multiple or encrypted | Signature segment present |
+| Response / Assertion signed | `kid` present for asymmetric algorithms |
+| Weak SHA-1 signature or digest | `exp` / `nbf` / `iat` validity with clock skew |
+| NotBefore / NotOnOrAfter time window | Token lifetime over 24 hours |
+| Bearer SubjectConfirmation expiry | `aud` vs expected audience |
+| Audience vs expected SP Entity ID | `iss` vs expected issuer |
+| Recipient & Destination vs ACS URL | `sub` present |
+| Issuer vs expected IdP Entity ID | Profile claims and `email_verified` (ID tokens) |
+| X.509 certificate validity (+ 30-day warning) | |
+| NameID present and matches declared format | |
+| Attributes present and non-empty | |
+| SP- vs IdP-initiated (InResponseTo) | |
+
+Mismatches that differ only by case or a trailing slash are called out explicitly.
+
+> Signatures are checked for **presence and algorithm only**. SSO Doctor does not verify them cryptographically.
+
+### 📋 Decoded View
+- **SAML**: status, issuer, IDs, signature details, certificates (subject, issuer, validity, serial, **SHA-256 fingerprint**, copy PEM), subject, conditions, authentication context, multi-value attributes, and formatted XML
+- **JWT**: header and payload claims with descriptions, timestamps as local and relative times ("expires in 5 minutes"), signature, and formatted JSON
+- Copy button on every value; relative times refresh live
 
 ### ⚙️ Configurable Validation
-Optional inputs to compare against your expected values:
-- Expected Audience / Entity ID
-- Expected ACS URL
+Optional expected values to compare against (saved in your browser's localStorage):
+- Expected Audience / SP Entity ID (JWT: `aud`)
+- Expected ACS URL (SAML only)
 - Expected Issuer
-- Clock skew tolerance (default: 300 seconds)
+- Clock skew tolerance (default: 180 seconds)
+
+### 🎨 UX
+Light, dark and system themes · responsive layout · keyboard shortcut `/` to focus the input · accessible labels and focus states.
 
 ### 🧪 Sample Data
-One-click sample tokens (clearly fake) to explore the tool without needing a real SSO setup.
+Four one-click sample tokens (clearly fake, generated relative to the current time): a valid JWT, a broken JWT, an expired SAML response, and a SAML RequestDenied error.
 
 ### 🔒 Privacy by Design
-All processing runs locally via JavaScript in your browser. **No backend. No cookies. No analytics. No data storage. Nothing leaves the page.**
+All processing runs locally in your browser. **No backend. No cookies. No analytics. Nothing leaves the page.** Tokens are never stored; only your validation settings and theme are kept in localStorage.
 
 ---
 
 ## Quick Start
 
-### Use Online
-Deploy your own instance to Vercel in one click, or run locally:
-
 ### Run Locally
+
+Requires Node.js 20.19+ or 22.12+.
 
 ```bash
 git clone https://github.com/codecheesee/sso-doctor.git
@@ -87,7 +105,7 @@ Output goes to `dist/` — deploy it anywhere that serves static files.
 npx vercel --prod
 ```
 
-Or connect the GitHub repo to Vercel for automatic deploys on push.
+Or connect the GitHub repo to Vercel for automatic deploys on push. `vercel.json` sets a strict Content-Security-Policy and other security headers.
 
 ---
 
@@ -95,12 +113,12 @@ Or connect the GitHub repo to Vercel for automatic deploys on push.
 
 | Layer | Technology |
 |---|---|
-| Framework | React 18 + TypeScript |
-| Build | Vite 6 |
+| Framework | React 19 + TypeScript 5.9 |
+| Build | Vite 8 |
 | Styling | Tailwind CSS v4 |
-| SAML XML parsing | fast-xml-parser |
+| SAML XML parsing | Browser-native `DOMParser` (namespace-aware) |
 | Deflate handling | pako |
-| X.509 certificate parsing | pkijs + asn1js |
+| X.509 certificate parsing | asn1js |
 | Deployment | Vercel (static SPA) |
 
 ---
@@ -110,24 +128,31 @@ Or connect the GitHub repo to Vercel for automatic deploys on push.
 ```
 src/
 ├── lib/
-│   ├── detect.ts          # Auto-detect JWT vs SAML
+│   ├── detect.ts          # Auto-detect JWT / JWE / SAML
+│   ├── encoding.ts        # Input normalization, base64, inflate helpers
 │   ├── jwt.ts             # JWT base64url decoding
-│   ├── saml.ts            # SAML base64 → inflate → XML → structured data
+│   ├── saml.ts            # SAML → XML → structured data, X.509 parsing
+│   ├── sha256.ts          # Certificate fingerprints
+│   ├── time.ts            # Relative time and duration formatting
+│   ├── hooks.ts           # localStorage, theme, clipboard, live clock hooks
 │   ├── samples.ts         # Fake sample tokens for demo
 │   ├── types.ts           # Shared TypeScript interfaces
 │   └── checks/
-│       ├── samlChecks.ts  # 8 SAML validation checks
-│       └── jwtChecks.ts   # 8 JWT validation checks
+│       ├── samlChecks.ts  # SAML validation checks
+│       └── jwtChecks.ts   # JWT validation checks
 ├── components/
-│   ├── TokenInput.tsx         # Paste input + sample data buttons
-│   ├── ValidationConfig.tsx   # Optional config panel
-│   ├── DecodedView.tsx        # Decoded fields display
-│   ├── CheckResult.tsx        # Single PASS/WARN/FAIL card
-│   ├── CheckResultList.tsx    # All results + summary counts
-│   └── PrivacyNotice.tsx      # Privacy banner
+│   ├── Header.tsx             # App bar + theme switcher
+│   ├── TokenInput.tsx         # Input, paste, drag-and-drop, samples
+│   ├── ValidationConfig.tsx   # Optional expected values
+│   ├── CheckResultList.tsx    # Verdict banner, filters, results
+│   ├── CheckResult.tsx        # Single check card
+│   ├── DecodedView.tsx        # Decoded SAML / JWT / raw views
+│   ├── EmptyState.tsx         # First-run guidance
+│   ├── CopyButton.tsx
+│   └── icons.tsx
 ├── App.tsx                    # Main app orchestrator
 ├── main.tsx                   # React entry point
-└── index.css                  # Tailwind v4 + custom theme
+└── index.css                  # Tailwind v4 + dark mode variant
 ```
 
 ---
@@ -135,27 +160,28 @@ src/
 ## How It Works
 
 ### SAML Decoding Pipeline
-1. Base64-decode the input
-2. Check if the result is raw XML (starts with `<`)
-3. If not, try zlib inflate (`pako.inflate`), then raw deflate (`pako.inflateRaw`)
-4. Parse XML with `fast-xml-parser` (namespace prefixes removed for clean access)
-5. Walk the parsed tree to extract Issuer, NameID, Conditions, Attributes, etc.
-6. Parse embedded X.509 certificates using `pkijs` to extract subject, validity dates, serial number
+1. Normalize input (strip `SAMLResponse=`, URL-decode, remove whitespace)
+2. If it is already XML, use it; otherwise base64-decode
+3. If the result is not XML, try raw DEFLATE, then zlib inflate (`pako`)
+4. Parse with the browser's `DOMParser` and walk elements by local name, so any namespace prefix works
+5. Extract status, issuer, subject, conditions, attributes and signature details
+6. Parse embedded X.509 certificates with `asn1js` (subject, issuer, validity, serial, SHA-256 fingerprint)
 
 ### JWT Decoding Pipeline
-1. Split the string on `.` into 3 segments
-2. Replace base64url characters (`-` → `+`, `_` → `/`), pad with `=`
-3. Decode with `atob`, parse header and payload as JSON
+1. Normalize input (strip `Bearer`, quotes, URL encoding)
+2. Split on `.` — 3 parts is a JWT, 5 parts (or an `enc` header) is a JWE
+3. base64url-decode header and payload as UTF-8, parse as JSON
 4. Return structured header, payload, and raw signature
 
 ### Validation Engine
 Each check is an independent function that returns:
 ```typescript
 {
-  status: 'PASS' | 'WARN' | 'FAIL',
+  id: string,
+  status: 'PASS' | 'WARN' | 'FAIL' | 'INFO',
   title: string,    // e.g. "Token Expired"
-  cause: string,    // e.g. "The token's expiration time has passed."
-  fix: string       // e.g. "Token expired at 2024-01-15T10:35:00Z. Request a new token."
+  cause: string,    // e.g. "Expired 2024-01-15T10:35:00Z (2 hours ago)."
+  fix: string       // e.g. "Get a new token (or use the refresh token)…"
 }
 ```
 
