@@ -4,7 +4,6 @@
 
 SSO Doctor is a privacy-first diagnostic tool for engineers and IT admins debugging Single Sign-On integrations. Paste a SAML Response or JWT, and instantly see decoded fields, validation results, and actionable fix recommendations — without any data leaving your machine.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcodecheesee%2Fsso-doctor)
 
 ---
 
@@ -99,14 +98,6 @@ npm run build
 
 Output goes to `dist/` — deploy it anywhere that serves static files.
 
-### Deploy to Vercel
-
-```bash
-npx vercel --prod
-```
-
-Or connect the GitHub repo to Vercel for automatic deploys on push. `vercel.json` sets a strict Content-Security-Policy and other security headers.
-
 ---
 
 ## Tech Stack
@@ -119,7 +110,6 @@ Or connect the GitHub repo to Vercel for automatic deploys on push. `vercel.json
 | SAML XML parsing | Browser-native `DOMParser` (namespace-aware) |
 | Deflate handling | pako |
 | X.509 certificate parsing | asn1js |
-| Deployment | Vercel (static SPA) |
 
 ---
 
