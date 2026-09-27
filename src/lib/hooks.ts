@@ -42,6 +42,8 @@ export function useTheme(): [Theme, (t: Theme) => void] {
     const apply = () => {
       const dark = theme === 'dark' || (theme === 'system' && mq.matches);
       document.documentElement.classList.toggle('dark', dark);
+      // Keep the mobile browser chrome in sync with the page background
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#09090b' : '#ffffff');
     };
     apply();
     try {
@@ -56,6 +58,22 @@ export function useTheme(): [Theme, (t: Theme) => void] {
   return [theme, setThemeState];
 }
 
+function legacyCopy(text: string): boolean {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', '');
+  el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.appendChild(el);
+  el.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    el.remove();
+  }
+}
+
 /** Copies text to the clipboard and exposes a short-lived "copied" flag. */
 export function useCopy(timeout = 1500): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false);
@@ -67,10 +85,15 @@ export function useCopy(timeout = 1500): [boolean, (text: string) => void] {
   }, [copied, timeout]);
 
   const copy = useCallback((text: string) => {
-    navigator.clipboard?.writeText(text).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
+    // The async Clipboard API only exists on secure origins; fall back to execCommand elsewhere
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => setCopied(true),
+        () => setCopied(legacyCopy(text)),
+      );
+    } else {
+      setCopied(legacyCopy(text));
+    }
   }, []);
 
   return [copied, copy];

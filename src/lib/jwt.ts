@@ -44,6 +44,7 @@ export function decodeJwt(token: string): DecodedJwt {
     payload,
     signature: parts[2]!,
     raw: { header: headerStr, payload: payloadStr },
+    segments: [parts[0]!, parts[1]!, parts[2]!],
   };
 }
 

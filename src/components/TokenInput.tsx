@@ -1,7 +1,8 @@
 import { useState, type DragEvent, type Ref } from 'react';
 import type { DetectedType } from '../lib/types';
 import { SAMPLES } from '../lib/samples';
-import { ClipboardIcon, TrashIcon, UploadIcon } from './icons';
+import { ClipboardIcon, KeyIcon, SparkleIcon, TrashIcon, UploadIcon } from './icons';
+import { Tag, type TagTone } from './ui';
 
 interface TokenInputProps {
   value: string;
@@ -10,20 +11,31 @@ interface TokenInputProps {
   ref?: Ref<HTMLTextAreaElement>;
 }
 
-const TYPE_BADGE: Record<DetectedType, { label: string; className: string }> = {
-  saml: { label: 'SAML Response', className: 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/25' },
-  jwt: { label: 'JWT', className: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-400/25' },
-  jwe: { label: 'JWE (encrypted)', className: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/25' },
-  unknown: { label: 'Unrecognized', className: 'bg-zinc-100 text-zinc-600 ring-zinc-500/20 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-400/20' },
+const TYPE_TAG: Record<DetectedType, { label: string; tone: TagTone }> = {
+  saml: { label: 'SAML Response', tone: 'brand' },
+  jwt: { label: 'JWT', tone: 'sky' },
+  jwe: { label: 'JWE · encrypted', tone: 'amber' },
+  unknown: { label: 'Unrecognized', tone: 'zinc' },
 };
 
-const btn =
-  'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100';
+const SAMPLE_TONE: Record<string, string> = {
+  'jwt-valid': 'bg-brand-400',
+  'jwt-none': 'bg-rose-400',
+  'saml-expired': 'bg-amber-400',
+  'saml-denied': 'bg-rose-400',
+};
+
+const toolBtn =
+  'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition hover:bg-white/[0.07] hover:text-white';
+
+function formatBytes(n: number): string {
+  return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+}
 
 export function TokenInput({ value, onChange, detectedType, ref }: TokenInputProps) {
   const [dragging, setDragging] = useState(false);
   const [pasteError, setPasteError] = useState(false);
-  const badge = value.trim() ? TYPE_BADGE[detectedType] : null;
+  const tag = value.trim() ? TYPE_TAG[detectedType] : null;
 
   const handlePaste = async () => {
     try {
@@ -48,23 +60,25 @@ export function TokenInput({ value, onChange, detectedType, ref }: TokenInputPro
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <label htmlFor="token-input" className="text-sm font-medium">
+    <section className="overflow-hidden rounded-2xl bg-zinc-900 shadow-[0_20px_50px_-20px_rgb(0_0_0/0.45)] ring-1 ring-zinc-950/10 dark:bg-zinc-900/80 dark:ring-white/10">
+      {/* Window chrome */}
+      <div className="flex items-center gap-2 border-b border-white/[0.07] bg-white/[0.02] px-3 py-2">
+        <KeyIcon className="size-4 text-brand-400" />
+        <label htmlFor="token-input" className="text-[13px] font-semibold text-white">
           Token
         </label>
-        {badge && (
-          <span className={`animate-fade-in rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${badge.className}`}>
-            {badge.label}
-          </span>
+        {tag && (
+          <Tag tone={tag.tone} onDark className="animate-fade-in">
+            {tag.label}
+          </Tag>
         )}
         <div className="ml-auto flex items-center gap-0.5">
-          <button type="button" onClick={handlePaste} className={btn}>
-            <ClipboardIcon /> Paste
+          <button type="button" onClick={handlePaste} className={toolBtn}>
+            <ClipboardIcon className="size-3.5" /> Paste
           </button>
           {value && (
-            <button type="button" onClick={() => onChange('')} className={`${btn} hover:text-rose-600 dark:hover:text-rose-400`}>
-              <TrashIcon /> Clear
+            <button type="button" onClick={() => onChange('')} className={`${toolBtn} hover:text-rose-300`}>
+              <TrashIcon className="size-3.5" /> Clear
             </button>
           )}
         </div>
@@ -76,7 +90,10 @@ export function TokenInput({ value, onChange, detectedType, ref }: TokenInputPro
           e.preventDefault();
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(e) => {
+          // Ignore leave events fired when moving between children
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+        }}
         onDrop={handleDrop}
       >
         <textarea
@@ -86,21 +103,23 @@ export function TokenInput({ value, onChange, detectedType, ref }: TokenInputPro
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
-          className="block h-56 w-full resize-y bg-transparent p-3 font-mono text-[12.5px] leading-relaxed break-all text-zinc-800 placeholder:text-zinc-400 focus:outline-none lg:h-72 dark:text-zinc-200 dark:placeholder:text-zinc-500"
-          placeholder={'Paste a SAMLResponse (base64 or XML) or a JWT…\n\nAlso accepts "Bearer …" headers, SAMLResponse=… form bodies and URL-encoded values. You can drop a file here too.'}
+          className="scrollbar-thin block h-56 w-full resize-y bg-transparent px-4 py-3 font-mono text-[12.5px] leading-relaxed break-all text-zinc-200 caret-brand-400 placeholder:text-zinc-500 focus:outline-none lg:h-72"
+          placeholder={'Paste a SAMLResponse (base64 or XML) or a JWT…\n\nAlso accepts "Bearer …" headers, SAMLResponse=… form bodies, URL-encoded and line-wrapped values. You can drop a file here too.'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
         {dragging && (
-          <div className="pointer-events-none absolute inset-2 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-indigo-400 bg-indigo-50/90 text-sm font-medium text-indigo-700 dark:bg-indigo-950/90 dark:text-indigo-300">
-            <UploadIcon className="size-6" />
+          <div className="pointer-events-none absolute inset-2 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-brand-400/60 bg-zinc-950/85 text-sm font-medium text-brand-300 backdrop-blur-sm">
+            <UploadIcon className="size-7" />
             Drop file to load
           </div>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">Try a sample:</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/[0.07] bg-white/[0.02] px-3 py-2.5">
+        <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-semibold tracking-wider text-zinc-500 uppercase">
+          <SparkleIcon className="size-3.5 text-brand-400" /> Samples
+        </span>
         <div className="flex flex-wrap gap-1.5">
           {SAMPLES.map((s) => (
             <button
@@ -108,16 +127,21 @@ export function TokenInput({ value, onChange, detectedType, ref }: TokenInputPro
               type="button"
               title={s.description}
               onClick={() => onChange(s.build())}
-              className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs font-medium text-zinc-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition ring-inset hover:bg-brand-400/10 hover:text-brand-200 hover:ring-brand-400/40"
             >
+              <span className={`size-1.5 rounded-full ${SAMPLE_TONE[s.id] ?? 'bg-zinc-400'}`} />
               {s.label}
             </button>
           ))}
         </div>
-        {value && <span className="ml-auto text-[11px] text-zinc-400 tabular-nums">{value.length.toLocaleString()} chars</span>}
+        {value && (
+          <span className="ml-auto font-mono text-[11px] text-zinc-500 tabular-nums">
+            {value.length.toLocaleString()} chars · {formatBytes(new Blob([value]).size)}
+          </span>
+        )}
       </div>
       {pasteError && (
-        <p className="border-t border-zinc-100 px-3 py-2 text-xs text-amber-700 dark:border-zinc-800 dark:text-amber-400">
+        <p role="status" className="border-t border-white/[0.07] px-3 py-2 text-xs text-amber-300">
           Clipboard access was blocked. Press Ctrl/⌘+V in the box instead.
         </p>
       )}

@@ -4,6 +4,14 @@
 
 SSO Doctor is a privacy-first diagnostic tool for engineers and IT admins debugging Single Sign-On integrations. Paste a SAML Response or JWT, and instantly see decoded fields, validation results, and actionable fix recommendations — without any data leaving your machine.
 
+<p align="center">
+  <img src="docs/screenshot-dark.png" alt="SSO Doctor diagnosing an expired SAML response (dark theme)" width="880" />
+</p>
+
+<details>
+<summary>Light theme</summary>
+<p align="center"><img src="docs/screenshot-light.png" alt="SSO Doctor in the light theme" width="880" /></p>
+</details>
 
 ---
 
@@ -23,11 +31,11 @@ SSO Doctor does both decoding **and** validation, tells you exactly what's wrong
 Paste almost anything and SSO Doctor identifies it:
 - SAML Response or Assertion — base64, base64 + DEFLATE (HTTP-Redirect binding), or raw XML
 - JWT (OIDC ID token / access token) and JWE (encrypted JWT, flagged as unreadable)
-- Pasted as-is from dev tools: `Bearer …` headers, `SAMLResponse=…` form bodies, URL-encoded values
+- Pasted as-is from dev tools: `Bearer …` headers, `SAMLResponse=…` form bodies, URL-encoded and line-wrapped values
 - Drag and drop a file onto the input
 
 ### 🩻 Diagnosis First
-A verdict banner (Healthy / warnings / problems found) followed by every check, failures first. Each failed or warning check includes a **How to fix** note. **Copy report** puts the full result on your clipboard for a ticket.
+A verdict banner with a health ring (Healthy / warnings / problems found) and a **validity timeline** that plots NotBefore / NotOnOrAfter (or `iat` / `nbf` / `exp`) against the current time, followed by every check, failures first. Each failed or warning check includes a **How to fix** note. **Copy report** puts the full result on your clipboard for a ticket.
 
 ### ✅ Validation Engine
 Checks return **FAIL / WARN / INFO / PASS**. Skipped checks (no expected value configured) are shown as INFO, not PASS.
@@ -53,8 +61,9 @@ Mismatches that differ only by case or a trailing slash are called out explicitl
 > Signatures are checked for **presence and algorithm only**. SSO Doctor does not verify them cryptographically.
 
 ### 📋 Decoded View
-- **SAML**: status, issuer, IDs, signature details, certificates (subject, issuer, validity, serial, **SHA-256 fingerprint**, copy PEM), subject, conditions, authentication context, multi-value attributes, and formatted XML
-- **JWT**: header and payload claims with descriptions, timestamps as local and relative times ("expires in 5 minutes"), signature, and formatted JSON
+- **SAML**: a message-structure map (signed / unsigned / encrypted parts at a glance), status, issuer, IDs, signature details, certificates (subject, issuer, validity, serial, **SHA-256 fingerprint**, copy PEM), subject, conditions, authentication context, multi-value attributes, and formatted XML
+- **JWT**: color-coded token anatomy (header · payload · signature), header and payload claims with descriptions, timestamps as local and relative times ("expires in 5 minutes"), signature, and formatted JSON
+- Raw XML / JSON view with syntax highlighting and line numbers
 - Copy button on every value; relative times refresh live
 
 ### ⚙️ Configurable Validation
@@ -65,13 +74,13 @@ Optional expected values to compare against (saved in your browser's localStorag
 - Clock skew tolerance (default: 180 seconds)
 
 ### 🎨 UX
-Light, dark and system themes · responsive layout · keyboard shortcut `/` to focus the input · accessible labels and focus states.
+Light, dark and system themes · responsive layout · keyboard shortcut `/` to focus the input · arrow-key navigable tabs · accessible labels and focus states · a custom duotone icon set.
 
 ### 🧪 Sample Data
 Four one-click sample tokens (clearly fake, generated relative to the current time): a valid JWT, a broken JWT, an expired SAML response, and a SAML RequestDenied error.
 
 ### 🔒 Privacy by Design
-All processing runs locally in your browser. **No backend. No cookies. No analytics. Nothing leaves the page.** Tokens are never stored; only your validation settings and theme are kept in localStorage.
+All processing runs locally in your browser. **No backend. No cookies. No analytics. No third-party requests** (fonts are bundled, not loaded from a CDN). **Nothing leaves the page.** Tokens are never stored; only your validation settings and theme are kept in localStorage.
 
 ---
 
@@ -107,6 +116,7 @@ Output goes to `dist/` — deploy it anywhere that serves static files.
 | Framework | React 19 + TypeScript 5.9 |
 | Build | Vite 8 |
 | Styling | Tailwind CSS v4 |
+| Fonts | Inter & JetBrains Mono, self-hosted via Fontsource |
 | SAML XML parsing | Browser-native `DOMParser` (namespace-aware) |
 | Deflate handling | pako |
 | X.509 certificate parsing | asn1js |
@@ -124,6 +134,8 @@ src/
 │   ├── saml.ts            # SAML → XML → structured data, X.509 parsing
 │   ├── sha256.ts          # Certificate fingerprints
 │   ├── time.ts            # Relative time and duration formatting
+│   ├── timeline.ts        # Validity window for the timeline
+│   ├── highlight.tsx      # Dependency-free JSON / XML highlighting
 │   ├── hooks.ts           # localStorage, theme, clipboard, live clock hooks
 │   ├── samples.ts         # Fake sample tokens for demo
 │   ├── types.ts           # Shared TypeScript interfaces
@@ -131,7 +143,7 @@ src/
 │       ├── samlChecks.ts  # SAML validation checks
 │       └── jwtChecks.ts   # JWT validation checks
 ├── components/
-│   ├── Header.tsx             # App bar + theme switcher
+│   ├── Header.tsx             # App bar, theme switcher, hero
 │   ├── TokenInput.tsx         # Input, paste, drag-and-drop, samples
 │   ├── ValidationConfig.tsx   # Optional expected values
 │   ├── CheckResultList.tsx    # Verdict banner, filters, results
@@ -139,7 +151,8 @@ src/
 │   ├── DecodedView.tsx        # Decoded SAML / JWT / raw views
 │   ├── EmptyState.tsx         # First-run guidance
 │   ├── CopyButton.tsx
-│   └── icons.tsx
+│   ├── ui.tsx                 # Tag, Panel, GridPattern, Spotlight primitives
+│   └── icons.tsx              # Duotone icon set + logo mark
 ├── App.tsx                    # Main app orchestrator
 ├── main.tsx                   # React entry point
 └── index.css                  # Tailwind v4 + dark mode variant
@@ -150,7 +163,7 @@ src/
 ## How It Works
 
 ### SAML Decoding Pipeline
-1. Normalize input (strip `SAMLResponse=`, URL-decode, remove whitespace)
+1. Normalize input (strip `SAMLResponse=`, URL-decode, remove whitespace; raw XML is taken verbatim)
 2. If it is already XML, use it; otherwise base64-decode
 3. If the result is not XML, try raw DEFLATE, then zlib inflate (`pako`)
 4. Parse with the browser's `DOMParser` and walk elements by local name, so any namespace prefix works
