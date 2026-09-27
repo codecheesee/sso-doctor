@@ -85,6 +85,8 @@ export interface DecodedJwt {
   payload: Record<string, unknown>;
   signature: string;
   raw: { header: string; payload: string };
+  /** The three base64url segments exactly as received. */
+  segments: [string, string, string];
 }
 
 export type DetectedType = 'jwt' | 'jwe' | 'saml' | 'unknown';

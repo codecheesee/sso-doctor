@@ -1,37 +1,42 @@
 import type { ReactNode } from 'react';
 import type { CertificateInfo, DecodedJwt, DecodedSaml } from '../lib/types';
 import { parseDate, relativeTime } from '../lib/time';
+import { highlightLines } from '../lib/highlight';
 import { CopyButton } from './CopyButton';
+import { ClockIcon, CodeIcon, FingerprintIcon, KeyIcon, LayersIcon, LockIcon, ShieldCheckIcon } from './icons';
+import { Eyebrow, Panel, Tag } from './ui';
 
 /* ---------- building blocks ---------- */
 
-function Card({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
+function Card({ title, icon, children, actions, meta }: { title: string; icon?: ReactNode; children: ReactNode; actions?: ReactNode; meta?: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
-        <h3 className="text-sm font-semibold">{title}</h3>
+    <Panel className="overflow-hidden">
+      <div className="flex items-center gap-2.5 border-b border-zinc-900/[0.06] px-4 py-2.5 dark:border-white/[0.06]">
+        {icon && <span className="text-zinc-400 [&>svg]:size-4">{icon}</span>}
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+        {meta}
         <div className="ml-auto flex items-center gap-1">{actions}</div>
       </div>
       <div className="px-4">{children}</div>
-    </section>
+    </Panel>
   );
 }
 
 function Row({ label, value, hint, extra }: { label: string; value: ReactNode; hint?: string; extra?: ReactNode }) {
   const empty = value === '' || value === null || value === undefined;
   return (
-    <div className="group grid grid-cols-1 gap-x-4 gap-y-0.5 border-b border-zinc-100 py-2.5 last:border-0 sm:grid-cols-[11rem_1fr] dark:border-zinc-800/80">
-      <dt className="text-xs font-medium text-zinc-500 sm:pt-0.5 dark:text-zinc-400">
-        {label}
-        {hint && <span className="block text-[11px] font-normal break-all text-zinc-400 dark:text-zinc-500">{hint}</span>}
+    <div className="group grid grid-cols-1 gap-x-4 gap-y-1 border-b border-zinc-900/[0.05] py-2.5 last:border-0 sm:grid-cols-[11rem_1fr] dark:border-white/[0.05]">
+      <dt className="min-w-0 sm:pt-0.5">
+        <span className="font-mono text-[12px] font-semibold text-zinc-800 dark:text-zinc-200">{label}</span>
+        {hint && <span className="block text-[11px] break-all text-zinc-400 dark:text-zinc-500">{hint}</span>}
       </dt>
       <dd className="flex min-w-0 items-start gap-2">
-        <div className="min-w-0 flex-1 font-mono text-[12.5px] break-all">
-          {empty ? <span className="font-sans text-sm text-zinc-400 italic">not present</span> : value}
-          {extra && <div className="mt-0.5 font-sans text-xs text-zinc-500 dark:text-zinc-400">{extra}</div>}
+        <div className="min-w-0 flex-1 font-mono text-[12.5px] break-all text-zinc-700 dark:text-zinc-300">
+          {empty ? <span className="font-sans text-[13px] text-zinc-400 italic">not present</span> : value}
+          {extra && <div className="mt-1 font-sans text-xs text-zinc-500 dark:text-zinc-400">{extra}</div>}
         </div>
         {!empty && typeof value === 'string' && (
-          <CopyButton text={value} className="sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100" />
+          <CopyButton text={value} className="-my-1 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100" />
         )}
       </dd>
     </div>
@@ -40,38 +45,73 @@ function Row({ label, value, hint, extra }: { label: string; value: ReactNode; h
 
 function TimeExtra({ value, now }: { value: string; now: Date }) {
   const d = parseDate(value);
-  if (!d) return value ? <span className="text-rose-600">Invalid date</span> : null;
+  if (!d) return value ? <span className="text-rose-600 dark:text-rose-400">Invalid date</span> : null;
   const past = d < now;
   return (
-    <span>
-      {d.toLocaleString()} · <span className={past ? 'text-zinc-500' : 'text-emerald-600 dark:text-emerald-400'}>{relativeTime(d, now)}</span>
+    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+      <ClockIcon className="size-3.5 text-zinc-400" />
+      {d.toLocaleString()}
+      <span className="text-zinc-300 dark:text-zinc-600">·</span>
+      <span className={past ? 'text-zinc-500' : 'font-medium text-brand-700 dark:text-brand-400'}>{relativeTime(d, now)}</span>
     </span>
   );
 }
 
 function Pill({ ok, children }: { ok: boolean; children: ReactNode }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 font-sans text-xs font-semibold ${
-        ok ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-      }`}
-    >
-      {children}
-    </span>
-  );
+  return <Tag tone={ok ? 'brand' : 'rose'}>{children}</Tag>;
 }
 
 const short = (uri: string) => uri.split(/[:#]/).pop() || uri;
 
 /* ---------- SAML ---------- */
 
+/** An outline of the message, so missing or encrypted parts stand out at a glance. */
+function SamlStructure({ saml }: { saml: DecodedSaml }) {
+  const isResponse = saml.rootElement === 'Response';
+  type Node = { name: string; depth: number; ok: boolean; note?: string };
+  const nodes: Node[] = [];
+  if (isResponse) {
+    nodes.push({ name: 'Response', depth: 0, ok: true, note: saml.responseSigned ? 'signed' : 'unsigned' });
+    nodes.push({ name: 'Status', depth: 1, ok: saml.statusCode.endsWith(':Success'), note: short(saml.statusCode) || 'missing' });
+  }
+  const d = isResponse ? 1 : 0;
+  if (saml.encryptedAssertion) nodes.push({ name: 'EncryptedAssertion', depth: d, ok: true, note: 'opaque' });
+  if (saml.assertionCount > 0) {
+    nodes.push({ name: 'Assertion', depth: d, ok: true, note: saml.assertionSigned ? 'signed' : 'unsigned' });
+    nodes.push({ name: 'Subject', depth: d + 1, ok: !!saml.nameId, note: saml.nameId ? 'NameID' : 'no NameID' });
+    nodes.push({ name: 'Conditions', depth: d + 1, ok: !!(saml.notBefore || saml.notOnOrAfter), note: `${saml.audiences.length} audience${saml.audiences.length === 1 ? '' : 's'}` });
+    nodes.push({ name: 'AuthnStatement', depth: d + 1, ok: !!saml.authnInstant, note: saml.authnContextClassRef ? short(saml.authnContextClassRef) : undefined });
+    nodes.push({ name: 'AttributeStatement', depth: d + 1, ok: saml.attributes.length > 0, note: `${saml.attributes.length} attribute${saml.attributes.length === 1 ? '' : 's'}` });
+  } else if (!saml.encryptedAssertion) {
+    nodes.push({ name: 'Assertion', depth: d, ok: false, note: 'absent' });
+  }
+
+  return (
+    <Card title="Message structure" icon={<LayersIcon />}>
+      <ul className="py-3 font-mono text-[12.5px]">
+        {nodes.map((n, i) => (
+          <li key={`${n.name}-${i}`} className="flex items-center gap-2 py-1" style={{ paddingLeft: `${n.depth * 1.25}rem` }}>
+            {n.depth > 0 && <span aria-hidden="true" className="-ml-3 h-px w-2.5 bg-zinc-300 dark:bg-zinc-700" />}
+            <span className={`size-1.5 shrink-0 rounded-full ${n.ok ? 'bg-brand-500' : 'bg-rose-500'}`} />
+            <span className="text-zinc-400">
+              &lt;<span className="font-semibold text-zinc-800 dark:text-zinc-200">{n.name}</span>&gt;
+            </span>
+            {n.note && <span className="truncate font-sans text-xs text-zinc-500">{n.note}</span>}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function CertificateCard({ cert, index, now }: { cert: CertificateInfo; index: number; now: Date }) {
   const expired = cert.notAfter ? cert.notAfter < now : false;
   const soon = cert.notAfter ? !expired && cert.notAfter.getTime() - now.getTime() < 30 * 86400 * 1000 : false;
   return (
-    <div className="my-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <span className="text-xs font-semibold text-zinc-500">Certificate {index + 1}</span>
+    <div className="my-3 overflow-hidden rounded-xl ring-1 ring-zinc-900/[0.08] dark:ring-white/[0.08]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-900/[0.06] bg-zinc-900/[0.02] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
+        <FingerprintIcon className="size-4 text-zinc-400" />
+        <span className="text-xs font-semibold">X.509 certificate {index + 1}</span>
         {cert.parsed && cert.notAfter && <Pill ok={!expired && !soon}>{expired ? 'Expired' : soon ? 'Expires soon' : 'Valid'}</Pill>}
         <div className="ml-auto">
           <CopyButton text={cert.pem} label="PEM" />
@@ -85,7 +125,7 @@ function CertificateCard({ cert, index, now }: { cert: CertificateInfo; index: n
             <Row label="Valid from" value={cert.notBefore?.toISOString() ?? ''} extra={cert.notBefore && <TimeExtra value={cert.notBefore.toISOString()} now={now} />} />
             <Row label="Valid until" value={cert.notAfter?.toISOString() ?? ''} extra={cert.notAfter && <TimeExtra value={cert.notAfter.toISOString()} now={now} />} />
             <Row label="Serial" value={cert.serialNumber} />
-            <Row label="SHA-256 fingerprint" value={cert.sha256Fingerprint} />
+            <Row label="SHA-256" hint="fingerprint" value={cert.sha256Fingerprint} />
           </>
         )}
       </dl>
@@ -99,7 +139,9 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card title={saml.rootElement === 'Assertion' ? 'Assertion' : 'Response'}>
+      <SamlStructure saml={saml} />
+
+      <Card title={saml.rootElement === 'Assertion' ? 'Assertion' : 'Response'} icon={<CodeIcon />}>
         <dl>
           {saml.rootElement === 'Response' && (
             <Row
@@ -122,15 +164,15 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
         </dl>
       </Card>
 
-      <Card title="Signature">
+      <Card title="Signature" icon={<ShieldCheckIcon />}>
         <dl>
           <Row label="Response signed" value={<Pill ok={saml.responseSigned}>{saml.responseSigned ? 'Yes' : 'No'}</Pill>} />
           <Row
             label="Assertion signed"
             value={saml.encryptedAssertion ? <span className="font-sans text-sm text-zinc-500">encrypted, not visible</span> : <Pill ok={saml.assertionSigned}>{saml.assertionSigned ? 'Yes' : 'No'}</Pill>}
           />
-          {saml.signatureAlgorithm && <Row label="Signature algorithm" value={saml.signatureAlgorithm} extra={short(saml.signatureAlgorithm)} />}
-          {saml.digestAlgorithm && <Row label="Digest algorithm" value={saml.digestAlgorithm} extra={short(saml.digestAlgorithm)} />}
+          {saml.signatureAlgorithm && <Row label="Signature alg" value={saml.signatureAlgorithm} extra={short(saml.signatureAlgorithm)} />}
+          {saml.digestAlgorithm && <Row label="Digest alg" value={saml.digestAlgorithm} extra={short(saml.digestAlgorithm)} />}
         </dl>
         {saml.certificates.map((c, i) => (
           <CertificateCard key={i} cert={c} index={i} now={now} />
@@ -138,7 +180,8 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
       </Card>
 
       {saml.encryptedAssertion && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/5 dark:text-amber-300">
+        <div className="flex gap-3 rounded-2xl bg-amber-400/10 p-4 text-sm text-amber-800 ring-1 ring-amber-500/25 dark:text-amber-300">
+          <LockIcon className="mt-0.5 size-4 shrink-0" />
           The assertion is encrypted. Subject, conditions and attributes cannot be shown without the SP private key.
         </div>
       )}
@@ -149,25 +192,25 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
             <dl>
               <Row label="NameID" value={saml.nameId} />
               <Row label="NameID format" value={saml.nameIdFormat} extra={saml.nameIdFormat && short(saml.nameIdFormat)} />
-              <Row label="Confirmation method" value={saml.subjectConfirmationMethod} extra={saml.subjectConfirmationMethod && short(saml.subjectConfirmationMethod)} />
+              <Row label="Confirmation" value={saml.subjectConfirmationMethod} extra={saml.subjectConfirmationMethod && short(saml.subjectConfirmationMethod)} />
               <Row label="Recipient" value={saml.recipient} />
               <Row label="NotOnOrAfter" value={saml.subjectConfirmationNotOnOrAfter} extra={<TimeExtra value={saml.subjectConfirmationNotOnOrAfter} now={now} />} />
             </dl>
           </Card>
 
-          <Card title="Conditions">
+          <Card title="Conditions" icon={<ClockIcon />}>
             <dl>
               <Row label="NotBefore" value={saml.notBefore} extra={<TimeExtra value={saml.notBefore} now={now} />} />
               <Row label="NotOnOrAfter" value={saml.notOnOrAfter} extra={<TimeExtra value={saml.notOnOrAfter} now={now} />} />
               {saml.audiences.length <= 1 ? (
                 <Row label="Audience" value={saml.audiences[0] ?? ''} />
               ) : (
-                saml.audiences.map((a, i) => <Row key={a} label={`Audience ${i + 1}`} value={a} />)
+                saml.audiences.map((a, i) => <Row key={`${a}-${i}`} label={`Audience ${i + 1}`} value={a} />)
               )}
             </dl>
           </Card>
 
-          <Card title="Authentication">
+          <Card title="Authentication" icon={<KeyIcon />}>
             <dl>
               <Row label="AuthnInstant" value={saml.authnInstant} extra={<TimeExtra value={saml.authnInstant} now={now} />} />
               <Row label="SessionIndex" value={saml.sessionIndex} />
@@ -176,7 +219,7 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
             </dl>
           </Card>
 
-          <Card title={`Attributes (${saml.attributes.length})`}>
+          <Card title="Attributes" icon={<LayersIcon />} meta={<Tag>{saml.attributes.length}</Tag>}>
             {saml.attributes.length ? (
               <dl>
                 {saml.attributes.map((a, i) => {
@@ -190,7 +233,7 @@ export function SamlDecoded({ saml, now }: { saml: DecodedSaml; now: Date }) {
                         a.values.length > 1 ? (
                           <span className="flex flex-wrap gap-1">
                             {a.values.map((v, j) => (
-                              <span key={j} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                              <span key={j} className="rounded-md bg-zinc-900/[0.05] px-1.5 py-0.5 text-xs text-zinc-800 ring-1 ring-zinc-900/[0.06] dark:bg-white/[0.06] dark:text-zinc-200 dark:ring-white/[0.06]">
                                 {v || '(empty)'}
                               </span>
                             ))}
@@ -249,7 +292,7 @@ function ClaimRows({ obj, now }: { obj: Record<string, unknown>; now: Date }) {
   return (
     <dl>
       {Object.entries(obj).map(([k, v]) => {
-        const isTime = TIME_CLAIMS.has(k) && typeof v === 'number';
+        const isTime = TIME_CLAIMS.has(k) && typeof v === 'number' && Number.isFinite(v);
         const display = typeof v === 'string' ? v : JSON.stringify(v);
         return (
           <Row
@@ -265,18 +308,50 @@ function ClaimRows({ obj, now }: { obj: Record<string, unknown>; now: Date }) {
   );
 }
 
+const SEGMENTS = [
+  { name: 'Header', text: 'text-rose-500 dark:text-rose-400', dot: 'bg-rose-500' },
+  { name: 'Payload', text: 'text-violet-600 dark:text-violet-400', dot: 'bg-violet-500' },
+  { name: 'Signature', text: 'text-sky-600 dark:text-sky-400', dot: 'bg-sky-500' },
+];
+
+/** The encoded token, colored by segment. */
+function JwtAnatomy({ jwt }: { jwt: DecodedJwt }) {
+  return (
+    <Card title="Token anatomy" icon={<KeyIcon />} actions={<CopyButton text={jwt.segments.join('.')} label="Token" />}>
+      <p className="max-h-40 overflow-auto py-3 font-mono text-[12.5px] leading-relaxed break-all scrollbar-thin">
+        {jwt.segments.map((seg, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-zinc-400">.</span>}
+            <span className={SEGMENTS[i]!.text}>{seg || (i === 2 ? '' : '∅')}</span>
+          </span>
+        ))}
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-900/[0.05] py-2.5 dark:border-white/[0.05]">
+        {SEGMENTS.map((s, i) => (
+          <span key={s.name} className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
+            <span className={`size-2 rounded-full ${s.dot}`} />
+            {s.name}
+            <span className="font-mono text-[11px] text-zinc-400 tabular-nums">{jwt.segments[i]!.length}</span>
+          </span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export function JwtDecoded({ jwt, now }: { jwt: DecodedJwt; now: Date }) {
   return (
     <div className="flex flex-col gap-4">
-      <Card title="Header" actions={<CopyButton text={JSON.stringify(jwt.header, null, 2)} label="JSON" />}>
+      <JwtAnatomy jwt={jwt} />
+      <Card title="Header" meta={<span className="size-2 rounded-full bg-rose-500" />} actions={<CopyButton text={JSON.stringify(jwt.header, null, 2)} label="JSON" />}>
         <ClaimRows obj={jwt.header} now={now} />
       </Card>
-      <Card title="Payload" actions={<CopyButton text={JSON.stringify(jwt.payload, null, 2)} label="JSON" />}>
+      <Card title="Payload" meta={<span className="size-2 rounded-full bg-violet-500" />} actions={<CopyButton text={JSON.stringify(jwt.payload, null, 2)} label="JSON" />}>
         <ClaimRows obj={jwt.payload} now={now} />
       </Card>
-      <Card title="Signature" actions={jwt.signature && <CopyButton text={jwt.signature} />}>
+      <Card title="Signature" meta={<span className="size-2 rounded-full bg-sky-500" />} actions={jwt.signature && <CopyButton text={jwt.signature} />}>
         <p className="py-3 font-mono text-[12.5px] break-all text-zinc-600 dark:text-zinc-400">
-          {jwt.signature || <span className="font-sans text-rose-600 italic">empty</span>}
+          {jwt.signature || <span className="font-sans text-rose-600 italic dark:text-rose-400">empty</span>}
         </p>
       </Card>
     </div>
@@ -285,16 +360,34 @@ export function JwtDecoded({ jwt, now }: { jwt: DecodedJwt; now: Date }) {
 
 /* ---------- Raw ---------- */
 
-export function RawView({ title, content }: { title: string; content: string }) {
+export function RawView({ title, content, lang }: { title: string; content: string; lang: 'json' | 'xml' }) {
+  const lines = highlightLines(content, lang);
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-950 shadow-sm dark:border-zinc-800">
-      <div className="flex items-center border-b border-white/10 px-4 py-2">
-        <h3 className="text-xs font-medium text-zinc-400">{title}</h3>
-        <div className="ml-auto">
-          <CopyButton text={content} label="Copy" className="text-zinc-400 hover:bg-white/10 hover:text-white dark:hover:bg-white/10" />
+    <section className="overflow-hidden rounded-2xl bg-zinc-900 shadow-[0_20px_50px_-20px_rgb(0_0_0/0.45)] ring-1 ring-zinc-950/10 dark:ring-white/10">
+      <div className="flex items-center gap-2 border-b border-white/[0.07] bg-white/[0.02] px-4 py-2">
+        <span aria-hidden="true" className="flex gap-1.5">
+          <span className="size-2.5 rounded-full bg-white/10" />
+          <span className="size-2.5 rounded-full bg-white/10" />
+          <span className="size-2.5 rounded-full bg-white/10" />
+        </span>
+        <h3 className="ml-2 text-xs font-medium text-zinc-400">{title}</h3>
+        <Tag tone="brand" onDark className="ml-1">
+          {lang}
+        </Tag>
+        <div className="ml-auto flex items-center gap-2">
+          <Eyebrow className="hidden !text-zinc-500 sm:block">{lines.length} lines</Eyebrow>
+          <CopyButton text={content} label="Copy" className="text-zinc-400 hover:!bg-white/10 hover:!text-white" />
         </div>
       </div>
-      <pre className="max-h-[70vh] overflow-auto p-4 font-mono text-[12px] leading-relaxed whitespace-pre text-zinc-200">{content}</pre>
+      <pre className="max-h-[70vh] overflow-auto py-3 pr-4 font-mono text-[12px] leading-[1.7] whitespace-pre scrollbar-thin">
+        <code className="code-lines block">
+          {lines.map((l, i) => (
+            <span key={i} className="line block text-zinc-200">
+              {l}
+            </span>
+          ))}
+        </code>
+      </pre>
     </section>
   );
 }

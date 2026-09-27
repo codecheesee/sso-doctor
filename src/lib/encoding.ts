@@ -15,6 +15,9 @@ export function normalizeInput(input: string): string {
   const field = s.match(/(?:^|[?&#\s])(SAMLResponse|SAMLRequest|id_token|access_token)=([^&\s]+)/i);
   if (field?.[2]) s = field[2];
 
+  // Raw XML is taken verbatim: "%xx" inside it is literal text, not URL encoding
+  if (s.startsWith('<')) return s;
+
   // URL-encoded payloads (e.g. %2B, %3D) copied from the network tab
   if (/%[0-9a-f]{2}/i.test(s)) {
     try {
@@ -24,7 +27,8 @@ export function normalizeInput(input: string): string {
     }
   }
 
-  return s.trim();
+  // Tokens copied from terminals or logs are often hard-wrapped; base64 and JWTs never contain whitespace
+  return s.replace(/\s+/g, '');
 }
 
 /** Decodes standard or URL-safe base64 (whitespace tolerant, padding optional) into bytes. */
